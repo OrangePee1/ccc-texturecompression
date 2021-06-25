@@ -1,0 +1,92 @@
+setETC-一个自动化遍历Creator资源目录设置压缩纹理的脚本
+2021年2月25日
+1 功能简介
+目前 2.x 版本的Cocos Creator在设置压缩纹理格式时，需要一个一个资源去手动设置，对拥有成千上万个纹理资源的工程来说，这种操作显然不现实。
+
+本文代码的作用就是遍历Creator资源目录，自动化设置压缩纹理格式，并随时可以取消，恢复原始设置。
+
+2 代码
+代码里默认配置的是Android平台使用ETC1+A，iOS平台使用ETC2格式，转换选项都是slow，即质量最高压缩最慢。可根据需要自行修改
+
+const fs = require('fs');
+const path = require('path');
+
+const _etcSettings = {
+    "android": {
+        "formats": [
+          {
+            "name": "etc1",
+            "quality": "slow"
+          }
+        ]
+      },
+      "ios": {
+        "formats": [
+          {
+            "name": "etc2",
+            "quality": "slow"
+          }
+        ]
+      }
+};
+let sourcePath = process.argv[2];
+let isCompress = parseInt(process.argv[3]);
+
+let lookupDir = function(url) {
+    if (!fs.existsSync(url)) {
+        return;
+    }
+    fs.readdir(url, (err, files) => {
+        if (err) {
+            console.error(err);
+            return;
+        }
+        files.forEach((file) => {
+            let curPath = path.join(url, file);
+            let stat = fs.statSync(curPath);
+            if (stat.isDirectory()) {
+                lookupDir(curPath); // 遍历目录
+            } else {
+                if (file.indexOf('.meta') >= 0) {
+                    fs.readFile(curPath, (err, data) => {
+                        if (err) {
+                            console.error(err);
+                            return;
+                        }
+                        let obj = JSON.parse(data);
+                        if (obj && obj.platformSettings) {
+                            obj.platformSettings = isCompress ? _etcSettings : {}; // 设置压缩纹理
+                            let wrdata = JSON.stringify(obj, null, 2);
+                            fs.writeFile(curPath, wrdata, (err) => {
+                                if (err) {
+                                    console.error(err);
+                                    return;
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+        });
+    });
+}
+
+if (!path.isAbsolute(sourcePath)) {
+    sourcePath = path.join(__dirname, sourcePath)
+}
+lookupDir(sourcePath);
+3 使用
+首先确保拥有Node.js环境。
+
+3.1 步骤
+1 将上面代码保存为 setETC.js 文件。
+2 假设Creator工程目录是 d:/test，参数1代表使用压缩纹理，参数0代表取消压缩纹理。
+
+3.2 命令示例
+设置压缩纹理
+
+node setETC.js d:/test/assets 1
+取消压缩纹理（恢复为默认的PNG）
+
+node setETC.js d:/test/assets 0
+命令执行完后，Creator中启动构建即可。
